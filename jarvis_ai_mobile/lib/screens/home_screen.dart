@@ -1,64 +1,82 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive/hive.dart';
 import 'package:go_router/go_router.dart';
 
 import '../widgets/neon_orb.dart';
+import '../features/voice/presentation/providers/voice_controller.dart';
+import '../features/voice/domain/models/voice_state.dart';
+import '../features/voice/widgets/voice_wave.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-enum AiStatus { ready, listening, thinking, speaking }
-
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
-  AiStatus _status = AiStatus.ready;
-  int _selectedIndex = 0;
-
-  void _onMicPressed() {
-    setState(() => _status = AiStatus.listening);
-    Future.delayed(const Duration(seconds: 1), () => setState(() => _status = AiStatus.thinking));
-    Future.delayed(const Duration(seconds: 3), () => setState(() => _status = AiStatus.speaking));
-    Future.delayed(const Duration(seconds: 5), () => setState(() => _status = AiStatus.ready));
-  }
-
-  void _onItemTapped(int index) {
-    setState(() => _selectedIndex = index);
-    switch (index) {
-      case 0:
-        // home
-        break;
-      case 1:
-        context.go('/chat');
-        break;
-      case 2:
-        context.go('/settings');
-        break;
-    }
-  }
-
-  String get _statusText {
-    switch (_status) {
-      case AiStatus.listening:
-        return 'Listening';
-      case AiStatus.thinking:
-        return 'Thinking';
-      case AiStatus.speaking:
-        return 'Speaking';
-      case AiStatus.ready:
-      default:
-        return 'Ready';
-    }
+class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
+  @override
+  void initState() {
+    super.initState();
+    // Initialize voice engine
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(voiceControllerProvider.notifier).initialize();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final voiceState = ref.watch(voiceControllerProvider).state;
+    final voiceController = ref.read(voiceControllerProvider.notifier);
+
+    // If permission error, show a dialog
+    final vcState = ref.watch(voiceControllerProvider);
+    if (vcState.state == VoiceState.error && vcState.errorMessage != null && vcState.errorMessage!.contains('permission')) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Microphone permission required'),
+            content: const Text('This app needs microphone access to function as a voice assistant.'),
+            actions: [
+              TextButton(onPressed: () async {
+                Navigator.of(context).pop();
+                await ref.read(voiceControllerProvider.notifier).initialize();
+              }, child: const Text('Retry')),
+              TextButton(onPressed: () async {
+                Navigator.of(context).pop();
+                await openAppSettings();
+              }, child: const Text('Open Settings')),
+            ],
+          ),
+        );
+      });
+    }
+
+    final isListening = voiceState == VoiceState.listening;
+    final isProcessing = voiceState == VoiceState.processing;
+    final isSpeaking = voiceState == VoiceState.speaking;
+
     return Scaffold(
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: Colors.black54,
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
+        currentIndex: 0,
+        onTap: (index) {
+          switch (index) {
+            case 0:
+              // home
+              break;
+            case 1:
+              context.go('/chat');
+              break;
+            case 2:
+              context.go('/settings');
+              break;
+          }
+        },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'Chat'),
@@ -70,27 +88,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const NeonOrb(size: 220),
-              const SizedBox(height: 20),
-              Text(_statusText, style: const TextStyle(fontSize: 20, color: Colors.blueAccent)),
-              const SizedBox(height: 20),
-              GestureDetector(
-                onTap: _onMicPressed,
-                child: Container(
-                  width: 88,
-                  height: 88,
-                  decoration: BoxDecoration(
-                    gradient: const RadialGradient(colors: [Colors.blueAccent, Colors.transparent]),
-                    shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: Colors.blueAccent.withOpacity(0.2), blurRadius: 20, spreadRadius: 4)],
-                  ),
-                  child: const Icon(Icons.mic, size: 40, color: Colors.white),
-                ),
+              NeonOrb(size: 220, state: voiceState),
+              const SizedBox(height: 16),
+              Text(
+                vcState.state == VoiceState.idle ? 'Ready' : vcState.state.toString().split('.').last.capitalize(),
+                style: const TextStyle(fontSize: 20, color: Colors.blueAccent),
               ),
+              const SizedBox(height: 16),
+              VoiceWave(visible: isListening),
+              const SizedBox(height: 20),
+              if (isProcessing) const CircularProgressIndicator(color: Colors.blueAccent),
+              if (isSpeaking) const Icon(Icons.volume_up, size: 36, color: Colors.blueAccent),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+extension _Cap on String {
+  String capitalize() => isEmpty ? this : '${this[0].toUpperCase()}${substring(1)}';
 }

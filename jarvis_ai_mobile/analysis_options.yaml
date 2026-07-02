@@ -1,3 +1,7 @@
+flutter_lints: ^2.0.0
+
+# Keep the existing flutter_lints base and add project-specific rules
+
 include: package:flutter_lints/flutter.yaml
 
 linter:

@@ -18,6 +18,11 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   glassmorphism: ^2.0.0
+  google_generative_ai: ^0.2.0
+  speech_to_text: ^5.8.0
+  flutter_tts: ^3.6.0
+  permission_handler: ^10.4.0
+  audio_session: ^0.1.6
 
 dev_dependencies:
   flutter_test:
