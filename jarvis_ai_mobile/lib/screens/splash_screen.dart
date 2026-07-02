@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../widgets/neon_orb.dart';
+
+const _apiKeyStorageKey = 'gemini_api_key';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -12,15 +15,23 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  final _secureStorage = const FlutterSecureStorage();
+
   @override
   void initState() {
     super.initState();
     Timer(const Duration(milliseconds: 1400), _goNext);
   }
 
-  void _goNext() {
-    // After splash, route logic in main determines setup vs home
-    context.go('/setup');
+  Future<void> _goNext() async {
+    final apiKey = await _secureStorage.read(key: _apiKeyStorageKey);
+    if (apiKey != null && apiKey.isNotEmpty) {
+      if (!mounted) return;
+      context.go('/home');
+    } else {
+      if (!mounted) return;
+      context.go('/setup');
+    }
   }
 
   @override

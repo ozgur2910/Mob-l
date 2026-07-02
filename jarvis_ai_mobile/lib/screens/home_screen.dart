@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
 import '../widgets/neon_orb.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -28,10 +30,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         // home
         break;
       case 1:
-        Navigator.of(context).pushNamed('/chat');
+        context.go('/chat');
         break;
       case 2:
-        Navigator.of(context).pushNamed('/settings');
+        context.go('/settings');
         break;
     }
   }
