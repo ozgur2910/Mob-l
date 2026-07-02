@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive/hive.dart';
-import 'package:go_router/go_router.dart';
-
 import '../widgets/neon_orb.dart';
+import '../widgets/glass_panel.dart';
+import '../widgets/status_card.dart';
+import '../widgets/conversation_preview.dart';
+import '../widgets/jarvis_bottom_navigation.dart';
 import '../features/voice/presentation/providers/voice_controller.dart';
 import '../features/voice/domain/models/voice_state.dart';
-import '../features/voice/widgets/voice_wave.dart';
+import 'package:go_router/go_router.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -16,11 +16,12 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  int _selectedIndex = 0;
+
   @override
   void initState() {
     super.initState();
-    // Initialize voice engine
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(voiceControllerProvider.notifier).initialize();
     });
@@ -28,79 +29,97 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final voiceState = ref.watch(voiceControllerProvider).state;
-    final voiceController = ref.read(voiceControllerProvider.notifier);
-
-    // If permission error, show a dialog
-    final vcState = ref.watch(voiceControllerProvider);
-    if (vcState.state == VoiceState.error && vcState.errorMessage != null && vcState.errorMessage!.contains('permission')) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Text('Microphone permission required'),
-            content: const Text('This app needs microphone access to function as a voice assistant.'),
-            actions: [
-              TextButton(onPressed: () async {
-                Navigator.of(context).pop();
-                await ref.read(voiceControllerProvider.notifier).initialize();
-              }, child: const Text('Retry')),
-              TextButton(onPressed: () async {
-                Navigator.of(context).pop();
-                await openAppSettings();
-              }, child: const Text('Open Settings')),
-            ],
-          ),
-        );
-      });
-    }
-
-    final isListening = voiceState == VoiceState.listening;
-    final isProcessing = voiceState == VoiceState.processing;
-    final isSpeaking = voiceState == VoiceState.speaking;
+    final vc = ref.watch(voiceControllerProvider);
+    final voiceState = vc.state;
 
     return Scaffold(
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: Colors.black54,
-        currentIndex: 0,
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              // home
-              break;
-            case 1:
-              context.go('/chat');
-              break;
-            case 2:
-              context.go('/settings');
-              break;
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'Chat'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
-        ],
-      ),
+      backgroundColor: Colors.black,
       body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              NeonOrb(size: 220, state: voiceState),
-              const SizedBox(height: 16),
-              Text(
-                vcState.state == VoiceState.idle ? 'Ready' : vcState.state.toString().split('.').last.capitalize(),
-                style: const TextStyle(fontSize: 20, color: Colors.blueAccent),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final height = constraints.maxHeight;
+            final isPortrait = height > width;
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+              child: Column(
+                children: [
+                  // Top: Title and status
+                  Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('JARVIS', style: TextStyle(color: Colors.blueAccent, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 1.6)),
+                          const SizedBox(height: 4),
+                          Text(vc.state == VoiceState.idle ? 'Ready' : vc.state.toString().split('.').last.capitalize(), style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12)),
+                        ],
+                      ),
+                      const Spacer(),
+                      Icon(Icons.circle, color: Colors.blueAccent.withOpacity(0.2))
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Center: Orb and Status card
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          NeonOrb(size: isPortrait ? 220 : 180, state: voiceState),
+                          const SizedBox(height: 18),
+                          GlassPanel(
+                            child: SizedBox(
+                              width: isPortrait ? width * 0.86 : width * 0.48,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  StatusCard(state: voiceState, subtitle: vc.lastTranscript ?? ''),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          GlassPanel(
+                            child: SizedBox(
+                              width: isPortrait ? width * 0.86 : width * 0.48,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                                    child: Text('Recent', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                                  ),
+                                  ConversationPreview(maxItems: 3),
+                                ],
+                              ),
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Bottom nav
+                  JarvisBottomNavigation(currentIndex: _selectedIndex, onTap: (i) {
+                    setState(() => _selectedIndex = i);
+                    switch (i) {
+                      case 0:
+                        break;
+                      case 1:
+                        context.go('/chat');
+                        break;
+                      case 2:
+                        context.go('/settings');
+                        break;
+                    }
+                  })
+                ],
               ),
-              const SizedBox(height: 16),
-              VoiceWave(visible: isListening),
-              const SizedBox(height: 20),
-              if (isProcessing) const CircularProgressIndicator(color: Colors.blueAccent),
-              if (isSpeaking) const Icon(Icons.volume_up, size: 36, color: Colors.blueAccent),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
